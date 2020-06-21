@@ -1,9 +1,9 @@
-def reduce(nodeID, newdistances, precDistances):
-    for d in newdistances:
-        try:
-            if newdistances[d] < precDistances[d]:
-                precDistances[d] = newdistances[d]
-        except:
-            precDistances[d] = newdistances[d]
-
-    return precDistances
+def reduce(totalItemSetDict, minSupport):
+    goodSupport = {}
+    for item in totalItemSetDict:
+        support = 10
+        for i in totalItemSetDict[item]:
+            support += i
+        if support >= minSupport:
+            goodSupport[item] = support
+    return goodSupport
