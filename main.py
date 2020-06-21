@@ -1,14 +1,15 @@
 from mpi4py import MPI
-from getData import getLines
+from getData import getAdjList
 from map import maper
 from reduce import reduce
 from dictList import Dictlist
 
 comm = MPI.COMM_WORLD
 rank = comm.Get_rank()
-N = comm.Get_size()
+size = comm.Get_size()
 status = MPI.Status()
 
+startTag = 10
 mapTag = 11
 reduceTag = 12
 stopTag = 13
@@ -17,33 +18,42 @@ condition = True
 
 master = 0
 
+startNode = 3
+
 if rank != master:
-    comm.send(ready, dest=0, tag=mapTag)
+    comm.send(ready, dest=0, tag=startTag)
 
 if rank == master:
-    dataDict = getLines(N)
+    adjList = getAdjList()
 
-    for data in dataDict:
-        info = comm.recv(source=MPI.ANY_SOURCE, tag=mapTag, status=status)
+    comm.recv(source=MPI.ANY_SOURCE, tag=startTag, status=status)
+    dataToSend = {"NodeID": startNode, "Structure": {"adjacecyList": adjList[str(startNode)], "distance": 0, "distances": {}}}
+    comm.send(dataToSend, dest=status.source, tag=mapTag)
+    oldDistances = {}
+    counter = 0
+    while (True):
 
-        if info == ready:
-            comm.send(dataDict[data], dest=status.source, tag=mapTag)
-    totalItemSetDict = Dictlist()
+        distances = comm.recv(source=MPI.ANY_SOURCE, tag=mapTag, status=status)
 
-    for i in range(1, N):
-        combinedItemSetDict = comm.recv(source=MPI.ANY_SOURCE, tag=reduceTag, status=status)
-        for item in combinedItemSetDict:
-            totalItemSetDict[item] = combinedItemSetDict[item]
-    minSupport = 100
-    goodSupport = reduce(totalItemSetDict, minSupport)
-    for i in goodSupport:
-        print(str(i) + ' - Support = ' + str(goodSupport[i]))
 
+        for d in distances:
+            oldDistances[d] = distances[d]
+            print(oldDistances)
+            stat = comm.recv(source=MPI.ANY_SOURCE, tag=startTag, status=status)
+            if stat == ready:
+                dataToSend = {"NodeID": d, "Structure": {"adjacecyList": adjList[str(d)], "distance": distances[d], "distances": oldDistances}}
+                comm.send(dataToSend, dest=status.source, tag=mapTag)
+        counter += 1
+        if counter == 4:
+            break
 else:
-    while(condition):
+    while(True):
         data = comm.recv(source=master, tag=mapTag, status=status)
-        maxNrInCombination = 2
-        if data:
-            combinedItemSetDict = maper(data, maxNrInCombination)
-            comm.send(combinedItemSetDict, dest=master, tag=reduceTag)
-            condition = False
+        precDistances = data["Structure"]["distances"]
+        newDistances = maper(data["NodeID"], data["Structure"])
+        distances = reduce(data["NodeID"], newDistances, precDistances)
+        comm.send(distances, dest=status.source, tag=mapTag)
+        comm.send(ready, dest=0, tag=startTag)
+        break
+
+
